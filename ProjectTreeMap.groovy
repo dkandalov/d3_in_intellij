@@ -26,14 +26,13 @@ class ProjectTreeMap {
 		}.unique()
 
 		showInConsole(rootPackages.collect{ PsiPackage psiPackage -> psiPackage.name + ":" + psiPackage.subPackages.collect{it.name} }.join("\n"), project)
-//if (true) return
 		def rootContainer = new Container("/", rootPackages.collect{ convertToContainerHierarchy(it) })
 
-//showInConsole(rootContainer.toString(), event.project)
+		//showInConsole(rootContainer.toString(), event.project)
 
-		def server = restartHttpServer("ProjectTreeMap_HttpServer", ["/data.json": {
+		def server = restartHttpServer("ProjectTreeMap_HttpServer", ["/treemap.json": {
 			try {
-				rootContainer.toString()
+				rootContainer.toJSON()
 			} catch (Exception e) {
 				show(e.toString())
 			}
@@ -62,10 +61,11 @@ class ProjectTreeMap {
 			this.children = children
 		}
 
-		@Override String toString() {
-			"{\"name\": \"$name\", \"children\": [\n" +
-					children.collect {it.toString()}.join(",\n") +
-					"\n]}"
+		String toJSON(shift = 0) {
+			('\t' * shift) +
+			"{\"name\": \"$name\", " +
+			"\"children\": [\n" + children.collect {it.toJSON(shift + 1)}.join(',\n') +
+			"\n${'\t' * shift}]}"
 		}
 	}
 
@@ -78,8 +78,8 @@ class ProjectTreeMap {
 			this.size = size
 		}
 
-		@Override String toString() {
-			"{\"name\": \"$name\", \"size\": $size}"
+		String toJSON(shift = 0) {
+			('\t' * shift) + "{\"name\": \"$name\", \"size\": $size}"
 		}
 	}
 }

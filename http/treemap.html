@@ -58,7 +58,7 @@
             .append("svg:g")
             .attr("transform", "translate(.5,.5)");
 
-    d3.json("data.json", function(data) {
+    d3.json("treemap.json", function(data) {
         node = root = data;
 
         var nodes = treemap.nodes(root)
