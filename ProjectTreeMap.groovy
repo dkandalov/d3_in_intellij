@@ -22,8 +22,10 @@ import static ru.intellijeval.PluginUtil.*
  * Date: 18/11/2012
  */
 class ProjectTreeMap {
+	private static Container rootContainer = null
+
 	static showFor(Project project) {
-		Container rootContainer = null
+		rootContainer = null
 
 		new Task.Backgroundable(project, "Preparing tree map...", true, PerformInBackgroundOption.ALWAYS_BACKGROUND) {
 			@Override void run(ProgressIndicator indicator) {
@@ -130,7 +132,7 @@ class ProjectTreeMap {
 	public static Container createPackageAndClassTree(Project project) {
 		def rootFolders = rootFoldersIn(project)
 //		SwingUtilities.invokeLater { showInConsole(rootFolders.collect { PsiDirectory directory -> directory.name }.join("\n"), project) }
-		new Container("", rootFolders.collect{ convertToContainerHierarchy(it) })
+		new Container("", rootFolders.collect{ convertToContainerHierarchy(it).withName(it.parent.name + "/" + it.name) })
 	}
 
 	private static Collection<PsiDirectory> rootFoldersIn(Project project) {
@@ -158,13 +160,24 @@ class ProjectTreeMap {
 		Container(String name, Collection<Container> children) {
 			this.name = name
 			this.children = (Container[]) children.toArray()
-			this.size = (int) children.sum(0){ it.size }
+			this.size = sumOfChildrenSize(children)
 		}
 
-		Container(String name, int size) {
+		// this is an attempt to optimize groovy by not using .sum(Closure) method
+		static int sumOfChildrenSize(Collection<Container> children) {
+			int sum = 0
+			for (Container child in children) sum += child.size
+			sum
+		}
+
+		Container(String name, Container[] children = new Container[0], int size) {
 			this.name = name
-			this.children = new Container[0]
+			this.children = children
 			this.size = size
+		}
+
+		Container withName(String newName) {
+			new Container(newName, children, size)
 		}
 
 		String toJSON(String nameForJson = name, int level = 0) {
