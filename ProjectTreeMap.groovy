@@ -15,6 +15,7 @@ import javax.swing.*
 import static http.Util.restartHttpServer
 import static ru.intellijeval.PluginUtil.showExceptionInConsole
 import static ru.intellijeval.PluginUtil.showInConsole
+import static ru.intellijeval.PluginUtil.*
 
 /**
  * User: dima
@@ -22,23 +23,14 @@ import static ru.intellijeval.PluginUtil.showInConsole
  */
 class ProjectTreeMap {
 	static showFor(Project project) {
-		CharSequence s = ""
+		Container rootContainer = null
+
 		new Task.Backgroundable(project, "Preparing tree map...", true, PerformInBackgroundOption.ALWAYS_BACKGROUND) {
 			@Override void run(ProgressIndicator indicator) {
 				ApplicationManager.application.runReadAction {
 					try {
-//						Container rootContainer = createPackageAndClassTree(project)
-//						s = rootContainer.toJSON()
-
-						def rootFolders = rootFoldersIn(project)
-						StringBuilder stringBuilder = new StringBuilder()
-						stringBuilder.append('{"name": "/", "children": [')
-						appendChildrenAsJSON(stringBuilder, rootFolders)
-						stringBuilder.append(']}')
-
-						s = stringBuilder
-
-//						SwingUtilities.invokeLater{ showInConsole(s.toString(), project) }
+						rootContainer = createPackageAndClassTree(project)
+//						show(rootContainer.toJSON("aaaa"))
 					} catch (Exception e) {
 						showExceptionInConsole(e, project)
 					}
@@ -47,7 +39,7 @@ class ProjectTreeMap {
 
 			@Override void onSuccess() {
 				def server = restartHttpServer("ProjectTreeMap_HttpServer",
-						sampleHardcodedHandler(),
+						createRequestHandler(),
 						{ Exception e ->
 							SwingUtilities.invokeLater{ showExceptionInConsole(e, project) }
 						}
@@ -55,10 +47,29 @@ class ProjectTreeMap {
 				BrowserUtil.launchBrowser("http://localhost:${server.port}/treemap.html")
 			}
 
-			static Closure actualHandler() {
-				{ requestURI ->
-					// TODO
+			Closure createRequestHandler() {
+				{ String requestURI ->
+					if (!requestURI.endsWith(".json")) return
+
+					def containerFullName = requestURI.replace(".json", "").replaceFirst("/", "")
+					def namesList = containerFullName.split(/\./).toList()
+					if (namesList.size() > 0 && namesList.first() != "") {
+						namesList.add(0, "")
+					}
+					Container container = findContainerByName(namesList, rootContainer)
+					container?.toJSON(containerFullName)
 				}
+			}
+
+			static Container findContainerByName(List namesList, Container container) {
+				if (container == null || namesList.empty || namesList.first() != container.name) return null
+				if (namesList.size() == 1 && namesList.first() == container.name) return container
+
+				for (child in container.children) {
+					def result = findContainerByName(namesList.tail(), child)
+					if (result != null) return result
+				}
+				null
 			}
 
 			static Closure sampleHardcodedHandler() {
@@ -116,41 +127,15 @@ class ProjectTreeMap {
 		}.queue()
 	}
 
-	static CharSequence appendChildrenAsJSON(StringBuilder stringBuilder, Collection files, PsiDirectory parent = null) {
-		files.each { file ->
-			if (file.directory) {
-				stringBuilder.append('{"name": "' + file.name + '", "children": [')
-				appendChildrenAsJSON(stringBuilder, file.children.toList(), file)
-				stringBuilder.append(']},')
-			}
-		}
-		if (parent != null) {
-			JavaDirectoryService.instance.getClasses(parent).each {
-				stringBuilder.append('{"name": "' + it.name + '", "size": ' + sizeOf(it) + '},')
-			}
-		}
-
-		if (stringBuilder.lastIndexOf(",") == stringBuilder.length() - 1)
-			stringBuilder.deleteCharAt(stringBuilder.length() - 1)
-		stringBuilder
-	}
-
 	public static Container createPackageAndClassTree(Project project) {
 		def rootFolders = rootFoldersIn(project)
-		SwingUtilities.invokeLater {
-			showInConsole(rootFolders.collect { PsiDirectory directory -> directory.name }.join("\n"), project)
-		}
-
-		def rootContainer = new Container("/", rootFolders.collect{ convertToContainerHierarchy(it) })
-		rootContainer
+//		SwingUtilities.invokeLater { showInConsole(rootFolders.collect { PsiDirectory directory -> directory.name }.join("\n"), project) }
+		new Container("", rootFolders.collect{ convertToContainerHierarchy(it) })
 	}
 
-	public static Collection rootFoldersIn(Project project) {
+	private static Collection<PsiDirectory> rootFoldersIn(Project project) {
 		def psiManager = PsiManager.getInstance(project)
-
-		ProjectRootManager.getInstance(project).contentSourceRoots.collectMany{ sourceRoot ->
-			sourceRoot.children.findAll{it.directory}.collect{ psiManager.findDirectory(it) }.findAll{it != null}
-		}.unique()
+		ProjectRootManager.getInstance(project).contentSourceRoots.collect{ psiManager.findDirectory(it) }
 	}
 
 	private static def convertToContainerHierarchy(PsiDirectory directory) {
@@ -162,42 +147,36 @@ class ProjectTreeMap {
 		new Container(directory.name, classes() + packages())
 	}
 
-	private static def Element convertToElement(PsiClass psiClass) {
-		new Element(psiClass.name, sizeOf(psiClass))
-	}
-
-	public static int sizeOf(PsiClass psiClass) {
-		psiClass.allFields.size() + psiClass.allMethods.size() + psiClass.allInnerClasses.size()
-	}
+	private static def Container convertToElement(PsiClass psiClass) { new Container(psiClass.name, sizeOf(psiClass)) }
+	private static int sizeOf(PsiClass psiClass) { psiClass.allFields.size() + psiClass.allMethods.size() + psiClass.allInnerClasses.size() }
 
 	private static class Container {
 		final String name
-		final List children
-
-		Container(String name, List children) {
-			this.name = name
-			this.children = children
-		}
-
-		String toJSON(shift = 0) {
-			('\t' * shift) +
-			"{\"name\": \"$name\", " +
-			"\"children\": [\n" + children.collect {it.toJSON(shift + 1)}.join(',\n') +
-			"\n${'\t' * shift}]}"
-		}
-	}
-
-	private static class Element {
-		final String name
+		final Container[] children
 		final int size
 
-		Element(String name, int size) {
+		Container(String name, Collection<Container> children) {
 			this.name = name
+			this.children = (Container[]) children.toArray()
+			this.size = (int) children.sum(0){ it.size }
+		}
+
+		Container(String name, int size) {
+			this.name = name
+			this.children = new Container[0]
 			this.size = size
 		}
 
-		String toJSON(shift = 0) {
-			('\t' * shift) + "{\"name\": \"$name\", \"size\": $size}"
+		String toJSON(String nameForJson = name, int level = 0) {
+			String childrenAsJSON
+			if (level == 0) childrenAsJSON = "\"children\": [\n" + children.collect { it.toJSON(it.name, level + 1) }.join(',\n') + "]"
+			else childrenAsJSON = "\"hasChildren\": " + (children.size() > 0 ? "true" : "false")
+
+			"{" +
+			"\"name\": \"$nameForJson\", " +
+			"\"size\": \"$size\", " +
+			childrenAsJSON +
+			"}"
 		}
 	}
 }
