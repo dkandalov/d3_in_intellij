@@ -47,8 +47,25 @@ class ProjectTreeMap {
 
 			@Override void onSuccess() {
 				def server = restartHttpServer("ProjectTreeMap_HttpServer",
-						[
-"/.json": {"""
+						sampleHardcodedHandler(),
+						{ Exception e ->
+							SwingUtilities.invokeLater{ showExceptionInConsole(e, project) }
+						}
+				)
+				BrowserUtil.launchBrowser("http://localhost:${server.port}/treemap.html")
+			}
+
+			static Closure actualHandler() {
+				{ requestURI ->
+					// TODO
+				}
+			}
+
+			static Closure sampleHardcodedHandler() {
+				{ requestURI ->
+					[
+						"/.json":
+							"""
 {"name": "",
  "size": 100,
  "children": [
@@ -58,8 +75,10 @@ class ProjectTreeMap {
 	    "hasChildren": true
     }
  ]
-}"""},
-"/ru.json": {"""
+}"""
+						,
+						"/ru.json":
+							"""
 {"name": "ru",
  "size": 100,
  "children": [
@@ -69,8 +88,10 @@ class ProjectTreeMap {
 	    "hasChildren": true
     }
  ]
-}"""},
-"/ru.intellijeval.json": {"""
+}"""
+						,
+						"/ru.intellijeval.json":
+							"""
 {"name": "ru.intellijeval",
  "size": 100,
  "children": [
@@ -88,10 +109,9 @@ class ProjectTreeMap {
         "size": 19
     }
  ]
-}"""}
-						]
-				)
-				BrowserUtil.launchBrowser("http://localhost:${server.port}/treemap.html")
+}"""
+				].get(requestURI)
+				}
 			}
 		}.queue()
 	}

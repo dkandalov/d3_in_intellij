@@ -35,12 +35,12 @@
 <script type="text/javascript">
 
     var w = 1280 - 80,
-            h = 800 - 180,
-            x = d3.scale.linear().range([0, w]),
-            y = d3.scale.linear().range([0, h]),
-            color = d3.scale.category20c(),
-            root,
-            node;
+        h = 800 - 180,
+        x = d3.scale.linear().range([0, w]),
+        y = d3.scale.linear().range([0, h]),
+        color = d3.scale.category20c(),
+        root,
+        node;
 
     var treemap = d3.layout.treemap()
             .round(false)
@@ -103,6 +103,8 @@
                     .style("opacity", function(d) { d.w = this.getComputedTextLength(); return d.dx > d.w ? 1 : 0; });
 
 
+            d3.select("div").select("div").text(root.name); // TODO this kind of a hack
+
 //            cell.transition()
 //                    .duration(1000)
 //                    .attr("x", function(d, i) { return i - 0.5; });
@@ -111,12 +113,6 @@
 //                    .duration(1000)
 //                    .attr("x", function(d, i) { return i - 1.5; })
 //                    .remove();
-
-//            d3.select(window).on("click", function() { zoom(root); });
-//            d3.select("select").on("change", function() {
-//                treemap.value(this.value == "size" ? size : count).nodes(root);
-//                zoom(node);
-//            });
         });
     }
 

@@ -3,6 +3,7 @@ package http
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import static ru.intellijeval.PluginUtil.*
 
 class Util {
 	static def exampleOfUsage() {
@@ -43,10 +44,9 @@ class Util {
 		ActionManager.instance.unregisterAction(id)
 	}
 
-	public static SimpleHttpServer restartHttpServer(String id, Map map) {
+	public static SimpleHttpServer restartHttpServer(String id, Closure handler, Closure errorListener) {
 		getCachedOrCreate(id) { previousServer ->
 			if (previousServer != null) {
-//				PluginUtil.show("Prev server: " + previousServer)
 				previousServer.stop()
 			}
 
@@ -54,7 +54,7 @@ class Util {
 			def started = false
 			for (port in (8100..10000)) {
 				try {
-					server.start(port, map)
+					server.start(port, handler, errorListener)
 					started = true
 					break
 				} catch (BindException ignore) {

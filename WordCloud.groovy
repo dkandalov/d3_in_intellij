@@ -27,7 +27,8 @@ class WordCloud {
 			}
 
 			@Override void onSuccess() {
-				def server = restartHttpServer("WordCloud_HttpServer", ["/words.json": { wordsAsJSON }])
+				def handler = { ["/words.json": wordsAsJSON].get(it) }
+				def server = restartHttpServer("WordCloud_HttpServer", handler, { it.printStackTrace() })
 				BrowserUtil.launchBrowser("http://localhost:${server.port}/wordcloud.html")
 			}
 		}.queue()

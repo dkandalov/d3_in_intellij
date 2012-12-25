@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpServer
 import java.util.concurrent.Executors
 
 import static ru.intellijeval.EvalComponent.pluginToPathMap
+import static ru.intellijeval.PluginUtil.*
 
 /**
  * User: dima
@@ -21,11 +22,11 @@ class SimpleHttpServer {
 		server.start(8084)
 	}
 
-	void start(int port = 8100, Map<String, Closure> mapping = [:]) {
+	void start(int port = 8100, Closure handler = {null}, Closure errorListener = {}) {
 		this.port = port
 
 		server = HttpServer.create(new InetSocketAddress(port), 0)
-		server.createContext("/", new MyHandler(mapping))
+		server.createContext("/", new MyHandler(handler, errorListener))
 		server.executor = Executors.newCachedThreadPool()
 		server.start()
 	}
@@ -34,23 +35,29 @@ class SimpleHttpServer {
 		if (server != null) server.stop(0)
 	}
 
-	static class MyHandler implements HttpHandler {
-		private final Map<String, Closure> mapping
+	private static class MyHandler implements HttpHandler {
+		private final Closure handler
+		private final Closure errorListener
 
-		MyHandler(Map<String, Closure> mapping) {
-			this.mapping = mapping
+		MyHandler(Closure handler, Closure errorListener) {
+			this.handler = handler
+			this.errorListener = errorListener
 		}
 
 		@Override void handle(HttpExchange exchange) {
 			new Exchanger(exchange).with {
 				try {
-					println(requestURI)
+//					errorListener.call(new IllegalStateException("aajoasjdoasjd"))
+//					throw new IllegalStateException("aajoasjdoasjd")
+//					show(this.mapping."{$requestURI[1..-1]}")
 
-					if (this.mapping.containsKey(requestURI)) {
-						replyWithText(this.mapping[requestURI].call().toString())
+					def handlerResponse = this.handler(requestURI)
+					if (handlerResponse != null) {
+						replyWithText(handlerResponse.toString())
 					} else if (requestURI.startsWith("/") && requestURI.size() > 1) {
 						// TODO replace with "path" parameter
-						def file = new File(pluginToPathMap().get("tagcloud") + "/http" + "${requestURI.toString()}")
+						def pathToPluginFolder = pluginToPathMap().get("tagcloud")
+						def file = new File(pathToPluginFolder + "/http" + "${requestURI.toString()}")
 						if (!file.exists()) {
 							replyNotFound()
 						} else {
@@ -60,7 +67,8 @@ class SimpleHttpServer {
 						replyNotFound()
 					}
 				} catch (Exception e) {
-					e.printStackTrace()
+					show(e.toString())
+//					errorListener.call(e)
 				}
 			}
 		}
@@ -73,7 +81,7 @@ class SimpleHttpServer {
 		}
 
 		private static class Exchanger {
-			private HttpExchange exchange
+			private final HttpExchange exchange
 
 			Exchanger(HttpExchange exchange) {
 				this.exchange = exchange
