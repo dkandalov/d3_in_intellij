@@ -46,7 +46,51 @@ class ProjectTreeMap {
 			}
 
 			@Override void onSuccess() {
-				def server = restartHttpServer("ProjectTreeMap_HttpServer", ["/treemap.json": {s}])
+				def server = restartHttpServer("ProjectTreeMap_HttpServer",
+						[
+"/.json": {"""
+{"name": "",
+ "size": 100,
+ "children": [
+    {
+	    "name": "ru",
+	    "size": 100,
+	    "hasChildren": true
+    }
+ ]
+}"""},
+"/ru.json": {"""
+{"name": "ru",
+ "size": 100,
+ "children": [
+    {
+	    "name": "intellijeval",
+	    "size": 100,
+	    "hasChildren": true
+    }
+ ]
+}"""},
+"/ru.intellijeval.json": {"""
+{"name": "ru.intellijeval",
+ "size": 100,
+ "children": [
+    {
+	    "name": "toolwindow",
+	    "size": 40,
+	    "hasChildren": true
+    },
+    {
+        "name": "EvalComponent",
+        "size": 34
+    },
+    {
+        "name": "EvalErrorReporter",
+        "size": 19
+    }
+ ]
+}"""}
+						]
+				)
 				BrowserUtil.launchBrowser("http://localhost:${server.port}/treemap.html")
 			}
 		}.queue()

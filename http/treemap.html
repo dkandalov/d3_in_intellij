@@ -45,7 +45,7 @@
     var treemap = d3.layout.treemap()
             .round(false)
             .size([w, h])
-            .sticky(true)
+//            .sticky(true)
             .value(function(d) { return d.size; });
 
     var svg = d3.select("#body").append("div")
@@ -58,39 +58,67 @@
             .append("svg:g")
             .attr("transform", "translate(.5,.5)");
 
-    d3.json("treemap.json", function(data) {
-        node = root = data;
+    fetchPackageNodes("");
 
-        var nodes = treemap.nodes(root)
-                .filter(function(d) { return !d.children; });
+    function fetchPackageNodes(packageName) {
+        d3.json(packageName + ".json", function(data) {
+            node = root = data;
+            if (root == null) return;
 
-        var cell = svg.selectAll("g")
-                .data(nodes)
-                .enter().append("svg:g")
-                .attr("class", "cell")
-                .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
-                .on("click", function(d) { return zoom(node == d.parent ? root : d.parent); });
+            console.log(root);
 
-        cell.append("svg:rect")
-                .attr("width", function(d) { return d.dx - 1; })
-                .attr("height", function(d) { return d.dy - 1; })
-                .style("fill", function(d) { return color(d.parent.name); });
+            var nodes = treemap.nodes(root);
 
-        cell.append("svg:text")
-                .attr("x", function(d) { return d.dx / 2; })
-                .attr("y", function(d) { return d.dy / 2; })
-                .attr("dy", ".35em")
-                .attr("text-anchor", "middle")
-                .text(function(d) { return d.name; })
-                .style("opacity", function(d) { d.w = this.getComputedTextLength(); return d.dx > d.w ? 1 : 0; });
+            svg.selectAll("g").remove();
+//            old.transition()
+//                    .duration(500)
+//                    .attr("x", function(d, i) { return i - 200; })
 
-        d3.select(window).on("click", function() { zoom(root); });
+            var cell = svg.selectAll("g")
+                    .data(nodes)
+                    .enter().append("svg:g")
+                    .attr("class", "cell")
+                    .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+                    .on("click", function(d) {
+                        var shouldGoToParent = d3.event.altKey;
+                        if (shouldGoToParent) {
+                            var lastDotIndex = d.parent.name.lastIndexOf(".")
+                            fetchPackageNodes(d.parent.name.substring(0, lastDotIndex));
+                        } else if (d.hasChildren) {
+                            fetchPackageNodes(d.parent.name != "" ? d.parent.name + "." + d.name : d.name);
+                        }
+                    });
 
-        d3.select("select").on("change", function() {
-            treemap.value(this.value == "size" ? size : count).nodes(root);
-            zoom(node);
+            cell.append("svg:rect")
+                    .attr("width", function(d) { return d.dx - 1; })
+                    .attr("height", function(d) { return d.dy - 1; })
+                    .style("fill", function(d) { return color(d.name); });
+
+            cell.append("svg:text")
+                    .attr("x", function(d) { return d.dx / 2; })
+                    .attr("y", function(d) { return d.dy / 2; })
+                    .attr("dy", ".35em")
+                    .attr("text-anchor", "middle")
+                    .text(function(d) { return d.name; })
+                    .style("opacity", function(d) { d.w = this.getComputedTextLength(); return d.dx > d.w ? 1 : 0; });
+
+
+//            cell.transition()
+//                    .duration(1000)
+//                    .attr("x", function(d, i) { return i - 0.5; });
+//
+//            cell.exit().transition()
+//                    .duration(1000)
+//                    .attr("x", function(d, i) { return i - 1.5; })
+//                    .remove();
+
+//            d3.select(window).on("click", function() { zoom(root); });
+//            d3.select("select").on("change", function() {
+//                treemap.value(this.value == "size" ? size : count).nodes(root);
+//                zoom(node);
+//            });
         });
-    });
+    }
 
     function size(d) {
         return d.size;
