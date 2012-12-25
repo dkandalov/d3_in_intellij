@@ -56,7 +56,7 @@ class ProjectTreeMap {
 		files.each { file ->
 			if (file.directory) {
 				stringBuilder.append('{"name": "' + file.name + '", "children": [')
-				appendChildrenAsJSON(stringBuilder, file.children, file)
+				appendChildrenAsJSON(stringBuilder, file.children.toList(), file)
 				stringBuilder.append(']},')
 			}
 		}
