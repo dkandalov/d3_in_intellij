@@ -82,10 +82,9 @@
                     .on("click", function(d) {
                         var shouldGoToParent = d3.event.altKey;
                         if (shouldGoToParent) {
-                            var lastDotIndex = d.parent.name.lastIndexOf(".")
-                            fetchPackageNodes(d.parent.name.substring(0, lastDotIndex));
+                            fetchPackageNodes("parent-of/" + d.parent.name);
                         } else if (d.hasChildren) {
-                            fetchPackageNodes(d.parent.name != "" ? d.parent.name + "." + d.name : d.name);
+                            fetchPackageNodes(d.parent.name + "." + d.name);
                         }
                     });
 

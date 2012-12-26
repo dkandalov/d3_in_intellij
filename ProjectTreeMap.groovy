@@ -19,16 +19,16 @@ import static ru.intellijeval.PluginUtil.*
 
 /**
  * TODO:
- *  - ask whether to recalculate treemap (better calculate if it's null; have separate action to recalculate it)
- *  - collapse one-child containers
+ *  - compact one-child containers
  *  - make sure class size calculation makes sense (count statements?)
+ *  - open treemap based on currently selected item in project view or currently open file
  *  - show size under package/class name
- *  - fix not-removed svgs in UI
+ *  - fix not-removed svgs in UI and other UI exceptions
+ *  - ask whether to recalculate treemap (better calculate if it's null; have separate action to recalculate it)
  *
  *  - packages and classes should look differently in tree map (different color schemes? bold/bigger font for packages?)
  *  - clickable breadcrumbs (e.g. to quickly navigate several methods up)
  *  - popup hints for small rectangles in treemap (otherwise it's impossible to read package/class name)
- *  - open treemap based on currently selected item in project view or currently open file
  *  - reduce breadcrumbs font size when it doesn't fit on screen?
  *  - break up classes into methods?
  *
@@ -63,19 +63,30 @@ class ProjectTreeMap {
 		}.queue()
 	}
 
-	private static class RequestHandler {
+	static class RequestHandler {
 		private final Container rootContainer
 
 		RequestHandler(Container rootContainer) {
 			this.rootContainer = rootContainer
 		}
 
-		def onRequest(String requestURI) {
+		String onRequest(String requestURI) {
 			if (!requestURI.endsWith(".json")) return
 
-			def containerFullName = requestURI.replace(".json", "").replaceFirst("/", "")
-			List<String> namesList = splitName(containerFullName)
-			findContainerByName(namesList, rootContainer)?.toJSON(containerFullName)
+			def containerRequest = requestURI.replace(".json", "").replaceFirst("/", "")
+
+			Container container
+			if (containerRequest == "") {
+				container = rootContainer
+			} else if (containerRequest.startsWith("parent-of/")) {
+				containerRequest = containerRequest.replaceFirst("parent-of/", "")
+				List<String> path = splitName(containerRequest)
+				container = findContainerParent(path, rootContainer, rootContainer)
+			} else {
+				List<String> path = splitName(containerRequest)
+				container = findContainer(path, rootContainer)
+			}
+			container?.toJSON()
 		}
 
 		private static List<String> splitName(String containerFullName) {
@@ -87,19 +98,32 @@ class ProjectTreeMap {
 			namesList
 		}
 
-		private static Container findContainerByName(List namesList, Container container) {
-			if (container == null || namesList.empty || namesList.first() != container.name) return null
-			if (namesList.size() == 1 && namesList.first() == container.name) return container
+		private static Container findContainerParent(List path, Container container, Container parent) {
+			if (container == null || path.empty || path.first() != container.name) return null
+			if (path.size() == 1 && path.first() == container.name) {
+				return parent
+			}
 
 			for (child in container.children) {
-				def result = findContainerByName(namesList.tail(), child)
+				def result = findContainerParent(path.tail(), child, container)
+				if (result != null) return result
+			}
+			null
+		}
+
+		private static Container findContainer(List path, Container container) {
+			if (container == null || path.empty || path.first() != container.name) return null
+			if (path.size() == 1 && path.first() == container.name) return container
+
+			for (child in container.children) {
+				def result = findContainer(path.tail(), child)
 				if (result != null) return result
 			}
 			null
 		}
 	}
 
-	private static class PackageAndClassTreeBuilder {
+	static class PackageAndClassTreeBuilder {
 		private final Project project
 
 		PackageAndClassTreeBuilder(Project project) {
@@ -108,8 +132,21 @@ class ProjectTreeMap {
 
 		public Container buildTree() {
 			def rootFolders = rootFoldersIn(project)
-//		SwingUtilities.invokeLater { showInConsole(rootFolders.collect { PsiDirectory directory -> directory.name }.join("\n"), project) }
-			new Container("", rootFolders.collect{ convertToContainerHierarchy(it).withName(it.parent.name + "/" + it.name) })
+			def rootChildren = rootFolders.collect { convertToContainerHierarchy(it).withName(it.parent.name + "/" + it.name) }
+			compactEmptyMiddlePackages(new Container("", rootChildren))
+		}
+
+		private static Container compactEmptyMiddlePackages(Container container) {
+			if (true) return container // TODO remove this
+
+			if (container.children.size() == 0) {
+				container
+			} else if (container.children.size() == 1) {
+				def child = container.children.first()
+				child.withName(container.name + "." + child.name)
+			} else {
+				container
+			}
 		}
 
 		private static Collection<PsiDirectory> rootFoldersIn(Project project) {
@@ -131,41 +168,53 @@ class ProjectTreeMap {
 		private static int sizeOf(PsiClass psiClass) { psiClass.allFields.size() + psiClass.allMethods.size() + psiClass.allInnerClasses.size() }
 	}
 
-	private static class Container {
+	static class Container {
 		final String name
 		final Container[] children
 		final int size
+		private Container parent = null
 
 		Container(String name, Collection<Container> children) {
-			this.name = name
-			this.children = (Container[]) children.toArray()
-			this.size = sumOfChildrenSize(children)
-		}
-
-		// this is an attempt to optimize groovy by not using .sum(Closure) method
-		static int sumOfChildrenSize(Collection<Container> children) {
-			int sum = 0
-			for (Container child in children) sum += child.size
-			sum
+			this(name, (Container[]) children.toArray(), sumOfChildrenSizes(children))
 		}
 
 		Container(String name, Container[] children = new Container[0], int size) {
 			this.name = name
 			this.children = children
 			this.size = size
+
+			for (child in this.children) child.parent = this
 		}
 
 		Container withName(String newName) {
 			new Container(newName, children, size)
 		}
 
-		String toJSON(String nameForJson = name, int level = 0) {
+		static int sumOfChildrenSizes(Collection<Container> children) {
+			// this is an attempt to optimize groovy by not using .sum(Closure) method
+			int sum = 0
+			for (Container child in children) sum += child.size
+			sum
+		}
+
+		private String getFullName() {
+			if (parent == null) name
+			else parent.fullName + "." + name
+		}
+
+		String toJSON(int level = 0) {
 			String childrenAsJSON
-			if (level == 0) childrenAsJSON = "\"children\": [\n" + children.collect { it.toJSON(it.name, level + 1) }.join(',\n') + "]"
-			else childrenAsJSON = "\"hasChildren\": " + (children.size() > 0 ? "true" : "false")
+			String jsonName
+			if (level == 0) {
+				childrenAsJSON = "\"children\": [\n" + children.collect { it.toJSON(level + 1) }.join(',\n') + "]"
+				jsonName = fullName
+			} else {
+				childrenAsJSON = "\"hasChildren\": " + (children.size() > 0 ? "true" : "false")
+				jsonName = name
+			}
 
 			"{" +
-			"\"name\": \"$nameForJson\", " +
+			"\"name\": \"$jsonName\", " +
 			"\"size\": \"$size\", " +
 			childrenAsJSON +
 			"}"
