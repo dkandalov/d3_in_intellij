@@ -19,7 +19,7 @@ import static ru.intellijeval.PluginUtil.*
 
 /**
  * TODO:
- *  - compact one-child containers
+ *  + compact one-child containers
  *  - make sure class size calculation makes sense (count statements?)
  *  - open treemap based on currently selected item in project view or currently open file
  *  - show size under package/class name
@@ -64,10 +64,12 @@ class ProjectTreeMap {
 	}
 
 	static class RequestHandler {
+		private final boolean skipEmptyMiddlePackages
 		private final Container rootContainer
 
-		RequestHandler(Container rootContainer) {
+		RequestHandler(Container rootContainer, boolean skipEmptyMiddlePackages = true) {
 			this.rootContainer = rootContainer
+			this.skipEmptyMiddlePackages = skipEmptyMiddlePackages
 		}
 
 		String onRequest(String requestURI) {
@@ -81,10 +83,20 @@ class ProjectTreeMap {
 			} else if (containerRequest.startsWith("parent-of/")) {
 				containerRequest = containerRequest.replaceFirst("parent-of/", "")
 				List<String> path = splitName(containerRequest)
-				container = findContainerParent(path, rootContainer, rootContainer)
+				container = findContainer(path, rootContainer).parent
+
+				if (skipEmptyMiddlePackages) {
+					while (container != null && container != rootContainer && container.children.size() == 1)
+						container = container.parent
+				}
+				if (container == null) return rootContainer
 			} else {
 				List<String> path = splitName(containerRequest)
 				container = findContainer(path, rootContainer)
+				if (skipEmptyMiddlePackages) {
+					while (container.children.size() == 1 && container.children.first().children.size() > 0)
+						container = container.children.first()
+				}
 			}
 			container?.toJSON()
 		}
@@ -96,19 +108,6 @@ class ProjectTreeMap {
 				namesList.add(0, "")
 			}
 			namesList
-		}
-
-		private static Container findContainerParent(List path, Container container, Container parent) {
-			if (container == null || path.empty || path.first() != container.name) return null
-			if (path.size() == 1 && path.first() == container.name) {
-				return parent
-			}
-
-			for (child in container.children) {
-				def result = findContainerParent(path.tail(), child, container)
-				if (result != null) return result
-			}
-			null
 		}
 
 		private static Container findContainer(List path, Container container) {
@@ -195,6 +194,10 @@ class ProjectTreeMap {
 			int sum = 0
 			for (Container child in children) sum += child.size
 			sum
+		}
+
+		Container getParent() {
+			this.parent
 		}
 
 		private String getFullName() {
