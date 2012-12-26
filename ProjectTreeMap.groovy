@@ -8,7 +8,12 @@ import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.psi.JavaDirectoryService
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDirectory
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiManager
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiRecursiveElementVisitor
+import com.intellij.psi.PsiStatement
 
 import javax.swing.*
 
@@ -132,20 +137,7 @@ class ProjectTreeMap {
 		public Container buildTree() {
 			def rootFolders = rootFoldersIn(project)
 			def rootChildren = rootFolders.collect { convertToContainerHierarchy(it).withName(it.parent.name + "/" + it.name) }
-			compactEmptyMiddlePackages(new Container("", rootChildren))
-		}
-
-		private static Container compactEmptyMiddlePackages(Container container) {
-			if (true) return container // TODO remove this
-
-			if (container.children.size() == 0) {
-				container
-			} else if (container.children.size() == 1) {
-				def child = container.children.first()
-				child.withName(container.name + "." + child.name)
-			} else {
-				container
-			}
+			new Container("", rootChildren)
 		}
 
 		private static Collection<PsiDirectory> rootFoldersIn(Project project) {
@@ -164,7 +156,46 @@ class ProjectTreeMap {
 
 		private static Container convertToElement(PsiClass psiClass) { new Container(psiClass.name, sizeOf(psiClass)) }
 
-		private static int sizeOf(PsiClass psiClass) { psiClass.allFields.size() + psiClass.allMethods.size() + psiClass.allInnerClasses.size() }
+		private static sizeOf(PsiClass psiClass) {
+			if (psiClass.containingFile instanceof PsiJavaFile)
+				return new JavaClassEstimator().sizeOf(psiClass)
+			else
+				return new GenericClassEstimator().sizeOf(psiClass)
+		}
+	}
+
+	/**
+	 * Plugins for other languages (e.g. Groovy) which extend PsiClass even though it's psi for "java class"
+	 */
+	static class GenericClassEstimator {
+		int sizeOf(PsiClass psiClass) {
+			psiClass.text.split("\n").findAll{ it.trim() != "" }.size()
+		}
+	}
+
+	static class JavaClassEstimator {
+		int sizeOf(PsiClass psiClass) {
+			if (!psiClass.containingFile instanceof PsiJavaFile)
+				throw new IllegalArgumentException("$psiClass is not a Java class")
+
+			int statementCount = 0
+			psiClass.accept(new PsiRecursiveElementVisitor() {
+				@Override void visitElement(PsiElement element) {
+					if (element instanceof PsiStatement) statementCount++
+					super.visitElement(element)
+				}
+			})
+
+			1 + // this is to account for class declaration
+			statementCount +
+			psiClass.fields.size() +
+			psiClass.initializers.size() +
+			psiClass.constructors.sum(0){ sizeOfMethod((PsiMethod) it) } +
+			psiClass.methods.sum(0){ sizeOfMethod((PsiMethod) it) } +
+			psiClass.innerClasses.sum(0){ sizeOf((PsiClass) it) }
+		}
+
+		private static int sizeOfMethod(PsiMethod psiMethod) { 1 + psiMethod.parameterList.parametersCount }
 	}
 
 	static class Container {
