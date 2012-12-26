@@ -18,11 +18,25 @@ import static ru.intellijeval.PluginUtil.showInConsole
 import static ru.intellijeval.PluginUtil.*
 
 /**
+ * TODO:
+ *  - ask whether to recalculate treemap (better calculate if it's null; have separate action to recalculate it)
+ *  - collapse one-child containers
+ *  - make sure class size calculation makes sense (count statements?)
+ *  - show size under package/class name
+ *  - fix not-removed svgs in UI
+ *
+ *  - packages and classes should look differently in tree map (different color schemes? bold/bigger font for packages?)
+ *  - clickable breadcrumbs (e.g. to quickly navigate several methods up)
+ *  - popup hints for small rectangles in treemap (otherwise it's impossible to read package/class name)
+ *  - open treemap based on currently selected item in project view or currently open file
+ *  - reduce breadcrumbs font size when it doesn't fit on screen?
+ *  - break up classes into methods?
+ *
  * User: dima
  * Date: 18/11/2012
  */
 class ProjectTreeMap {
-	private static Container rootContainer = null
+	private static Container rootContainer = null // TODO will it be GCed on plugin reload?
 
 	static showFor(Project project) {
 		rootContainer = null
@@ -31,8 +45,7 @@ class ProjectTreeMap {
 			@Override void run(ProgressIndicator indicator) {
 				ApplicationManager.application.runReadAction {
 					try {
-						rootContainer = createPackageAndClassTree(project)
-//						show(rootContainer.toJSON("aaaa"))
+						rootContainer = new PackageAndClassTreeBuilder(project).buildTree()
 					} catch (Exception e) {
 						showExceptionInConsole(e, project)
 					}
@@ -41,116 +54,82 @@ class ProjectTreeMap {
 
 			@Override void onSuccess() {
 				def server = restartHttpServer("ProjectTreeMap_HttpServer",
-						createRequestHandler(),
-						{ Exception e ->
-							SwingUtilities.invokeLater{ showExceptionInConsole(e, project) }
-						}
+						{ String requestURI -> new RequestHandler(rootContainer).onRequest(requestURI) },
+						{ Exception e -> SwingUtilities.invokeLater{ showExceptionInConsole(e, project) } }
 				)
 				BrowserUtil.launchBrowser("http://localhost:${server.port}/treemap.html")
 			}
 
-			Closure createRequestHandler() {
-				{ String requestURI ->
-					if (!requestURI.endsWith(".json")) return
-
-					def containerFullName = requestURI.replace(".json", "").replaceFirst("/", "")
-					def namesList = containerFullName.split(/\./).toList()
-					if (namesList.size() > 0 && namesList.first() != "") {
-						namesList.add(0, "")
-					}
-					Container container = findContainerByName(namesList, rootContainer)
-					container?.toJSON(containerFullName)
-				}
-			}
-
-			static Container findContainerByName(List namesList, Container container) {
-				if (container == null || namesList.empty || namesList.first() != container.name) return null
-				if (namesList.size() == 1 && namesList.first() == container.name) return container
-
-				for (child in container.children) {
-					def result = findContainerByName(namesList.tail(), child)
-					if (result != null) return result
-				}
-				null
-			}
-
-			static Closure sampleHardcodedHandler() {
-				{ requestURI ->
-					[
-						"/.json":
-							"""
-{"name": "",
- "size": 100,
- "children": [
-    {
-	    "name": "ru",
-	    "size": 100,
-	    "hasChildren": true
-    }
- ]
-}"""
-						,
-						"/ru.json":
-							"""
-{"name": "ru",
- "size": 100,
- "children": [
-    {
-	    "name": "intellijeval",
-	    "size": 100,
-	    "hasChildren": true
-    }
- ]
-}"""
-						,
-						"/ru.intellijeval.json":
-							"""
-{"name": "ru.intellijeval",
- "size": 100,
- "children": [
-    {
-	    "name": "toolwindow",
-	    "size": 40,
-	    "hasChildren": true
-    },
-    {
-        "name": "EvalComponent",
-        "size": 34
-    },
-    {
-        "name": "EvalErrorReporter",
-        "size": 19
-    }
- ]
-}"""
-				].get(requestURI)
-				}
-			}
 		}.queue()
 	}
 
-	public static Container createPackageAndClassTree(Project project) {
-		def rootFolders = rootFoldersIn(project)
+	private static class RequestHandler {
+		private final Container rootContainer
+
+		RequestHandler(Container rootContainer) {
+			this.rootContainer = rootContainer
+		}
+
+		def onRequest(String requestURI) {
+			if (!requestURI.endsWith(".json")) return
+
+			def containerFullName = requestURI.replace(".json", "").replaceFirst("/", "")
+			List<String> namesList = splitName(containerFullName)
+			findContainerByName(namesList, rootContainer)?.toJSON(containerFullName)
+		}
+
+		private static List<String> splitName(String containerFullName) {
+			def namesList = containerFullName.split(/\./).toList()
+			if (namesList.size() > 0 && namesList.first() != "") {
+				// this is because for "" split returns [""] but for "foo" returns ["foo"], i.e. list without first ""
+				namesList.add(0, "")
+			}
+			namesList
+		}
+
+		private static Container findContainerByName(List namesList, Container container) {
+			if (container == null || namesList.empty || namesList.first() != container.name) return null
+			if (namesList.size() == 1 && namesList.first() == container.name) return container
+
+			for (child in container.children) {
+				def result = findContainerByName(namesList.tail(), child)
+				if (result != null) return result
+			}
+			null
+		}
+	}
+
+	private static class PackageAndClassTreeBuilder {
+		private final Project project
+
+		PackageAndClassTreeBuilder(Project project) {
+			this.project = project
+		}
+
+		public Container buildTree() {
+			def rootFolders = rootFoldersIn(project)
 //		SwingUtilities.invokeLater { showInConsole(rootFolders.collect { PsiDirectory directory -> directory.name }.join("\n"), project) }
-		new Container("", rootFolders.collect{ convertToContainerHierarchy(it).withName(it.parent.name + "/" + it.name) })
+			new Container("", rootFolders.collect{ convertToContainerHierarchy(it).withName(it.parent.name + "/" + it.name) })
+		}
+
+		private static Collection<PsiDirectory> rootFoldersIn(Project project) {
+			def psiManager = PsiManager.getInstance(project)
+			ProjectRootManager.getInstance(project).contentSourceRoots.collect{ psiManager.findDirectory(it) }
+		}
+
+		private static def convertToContainerHierarchy(PsiDirectory directory) {
+			def directoryService = JavaDirectoryService.instance
+
+			def classes = { directoryService.getClasses(directory).collect{ convertToElement(it) } }
+			def packages = { directory.children.findAll{it instanceof PsiDirectory}.collect{ convertToContainerHierarchy(it) } }
+
+			new Container(directory.name, classes() + packages())
+		}
+
+		private static Container convertToElement(PsiClass psiClass) { new Container(psiClass.name, sizeOf(psiClass)) }
+
+		private static int sizeOf(PsiClass psiClass) { psiClass.allFields.size() + psiClass.allMethods.size() + psiClass.allInnerClasses.size() }
 	}
-
-	private static Collection<PsiDirectory> rootFoldersIn(Project project) {
-		def psiManager = PsiManager.getInstance(project)
-		ProjectRootManager.getInstance(project).contentSourceRoots.collect{ psiManager.findDirectory(it) }
-	}
-
-	private static def convertToContainerHierarchy(PsiDirectory directory) {
-		def directoryService = JavaDirectoryService.instance
-
-		def classes = { directoryService.getClasses(directory).collect{ convertToElement(it) } }
-		def packages = { directory.children.findAll{it instanceof PsiDirectory}.collect{ convertToContainerHierarchy(it) } }
-
-		new Container(directory.name, classes() + packages())
-	}
-
-	private static def Container convertToElement(PsiClass psiClass) { new Container(psiClass.name, sizeOf(psiClass)) }
-	private static int sizeOf(PsiClass psiClass) { psiClass.allFields.size() + psiClass.allMethods.size() + psiClass.allInnerClasses.size() }
 
 	private static class Container {
 		final String name
