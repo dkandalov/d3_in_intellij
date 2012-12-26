@@ -13,7 +13,7 @@
         }
 
         text {
-            font-size: 11px;
+            font-size: 14px;
         }
 
         rect {
@@ -70,9 +70,6 @@
             var nodes = treemap.nodes(root);
 
             svg.selectAll("g").remove();
-//            old.transition()
-//                    .duration(500)
-//                    .attr("x", function(d, i) { return i - 200; })
 
             var cell = svg.selectAll("g")
                     .data(nodes)
@@ -100,6 +97,14 @@
                     .attr("text-anchor", "middle")
                     .text(function(d) { return d.name; })
                     .style("opacity", function(d) { d.w = this.getComputedTextLength(); return d.dx > d.w ? 1 : 0; });
+
+            cell.append("svg:text")
+                    .attr("x", function(d) { return d.dx / 2; })
+                    .attr("y", function(d) { return d.dy / 2; })
+                    .attr("dy", "1.75em")
+                    .attr("text-anchor", "middle")
+                    .text(function(d) { return "(" + d.size + ")"; })
+                    .style("opacity", function(d) { d.w = this.getComputedTextLength(); return d.dx > d.w ? 0.5 : 0; });
 
 
             d3.select("div").select("div").text(root.name); // TODO this kind of a hack

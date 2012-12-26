@@ -25,9 +25,9 @@ import static ru.intellijeval.PluginUtil.*
 /**
  * TODO:
  *  + compact one-child containers
- *  - make sure class size calculation makes sense (count statements?)
+ *  + make sure class size calculation makes sense (count statements?)
  *  - open treemap based on currently selected item in project view or currently open file
- *  - show size under package/class name
+ *  + show size under package/class name
  *  - fix not-removed svgs in UI and other UI exceptions
  *  - ask whether to recalculate treemap (better calculate if it's null; have separate action to recalculate it)
  *
