@@ -24,12 +24,8 @@
 <body>
 <div id="body">
     <div id="footer">
-        d3.layout.treemap
-        <div class="hint">click or option-click to descend or ascend</div>
-        <div><select>
-            <option value="size">Size</option>
-            <option value="count">Count</option>
-        </select></div>
+        <div class="packageNameLabel"></div>
+        <div class="hint">click or alt-click to descend or ascend</div>
     </div>
 </div>
 <script type="text/javascript">
@@ -64,9 +60,10 @@
             node = root = data;
             if (root == null) return;
 
-            console.log(root);
-
-            var nodes = treemap.nodes(root);
+            var nodes = treemap.nodes(root).filter(
+                    // remove root because it's visible in background (and it's currently simpler than scaling)
+                    function(node) { return node != root; }
+            );
 
             svg.selectAll("g").remove();
 
@@ -106,7 +103,7 @@
                     .style("opacity", function(d) { d.w = this.getComputedTextLength(); return d.dx > d.w ? 0.5 : 0; });
 
 
-            d3.select("div").select("div").text(root.name); // TODO this kind of a hack
+            d3.select(".packageNameLabel").text(formatForUI(root.name));
 
 //            cell.transition()
 //                    .duration(1000)
@@ -117,6 +114,12 @@
 //                    .attr("x", function(d, i) { return i - 1.5; })
 //                    .remove();
         });
+    }
+
+    function formatForUI(packageName) {
+        if (packageName.indexOf(".") == 0) packageName = packageName.substr(1);
+        if (packageName == "") packageName = "[project root]";
+        return packageName;
     }
 
     function size(d) {
