@@ -26,7 +26,7 @@ import static ru.intellijeval.PluginUtil.showInConsole
 import static ru.intellijeval.PluginUtil.*
 
 /**
- * TODO:
+ * What could be improved:
  *  + compact one-child containers
  *  + make sure class size calculation makes sense (count statements?)
  *  - open treemap based on currently selected item in project view or currently open file
@@ -168,12 +168,12 @@ class ProjectTreeMap {
 		}
 
 		public Container buildTree() {
-			def rootFolders = rootFoldersIn(project)
+			def rootFolders = sourceRootDirectoriesIn(project)
 			def rootChildren = rootFolders.collect { convertToContainerHierarchy(it).withName(it.parent.name + "/" + it.name) }
 			new Container("", rootChildren)
 		}
 
-		private static Collection<PsiDirectory> rootFoldersIn(Project project) {
+		private static Collection<PsiDirectory> sourceRootDirectoriesIn(Project project) {
 			def psiManager = PsiManager.getInstance(project)
 			ProjectRootManager.getInstance(project).contentSourceRoots.collect{ psiManager.findDirectory(it) }
 		}
