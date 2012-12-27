@@ -31,13 +31,13 @@ import static ru.intellijeval.PluginUtil.*
  *  + make sure class size calculation makes sense (count statements?)
  *  - open treemap based on currently selected item in project view or currently open file
  *  + show size under package/class name
- *  - fix not-removed svgs in UI and other UI exceptions
+ *  + fix not-removed svgs in UI and other UI exceptions
  *  - ask whether to recalculate treemap (better calculate if it's null; have separate action to recalculate it)
  *
+ *  - popup hints for small rectangles in treemap (otherwise it's impossible to read package/class name)
  *  - make sure it works with multiple projects (per-project treemap cache)
  *  - packages and classes should look differently in tree map (different color schemes? bold/bigger font for packages?)
  *  - clickable breadcrumbs (e.g. to quickly navigate several methods up)
- *  - popup hints for small rectangles in treemap (otherwise it's impossible to read package/class name)
  *  - reduce breadcrumbs font size when it doesn't fit on screen?
  *  - break up classes into methods?
  *
@@ -127,7 +127,7 @@ class ProjectTreeMap {
 					while (container != null && container != rootContainer && container.children.size() == 1)
 						container = container.parent
 				}
-				if (container == null) return rootContainer
+				if (container == null) container = rootContainer
 			} else {
 				List<String> path = splitName(containerRequest)
 				container = findContainer(path, rootContainer)
@@ -243,7 +243,7 @@ class ProjectTreeMap {
 
 		Container(String name, Container[] children = new Container[0], int size) {
 			this.name = name
-			this.children = children
+			this.children = children.findAll{ it.size > 0 }
 			this.size = size
 
 			for (child in this.children) child.parent = this
