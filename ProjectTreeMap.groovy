@@ -1,5 +1,7 @@
 import com.intellij.ide.BrowserUtil
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.PerformInBackgroundOption
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -14,6 +16,7 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiRecursiveElementVisitor
 import com.intellij.psi.PsiStatement
+import http.SimpleHttpServer
 
 import javax.swing.*
 
@@ -31,6 +34,7 @@ import static ru.intellijeval.PluginUtil.*
  *  - fix not-removed svgs in UI and other UI exceptions
  *  - ask whether to recalculate treemap (better calculate if it's null; have separate action to recalculate it)
  *
+ *  - make sure it works with multiple projects (per-project treemap cache)
  *  - packages and classes should look differently in tree map (different color schemes? bold/bigger font for packages?)
  *  - clickable breadcrumbs (e.g. to quickly navigate several methods up)
  *  - popup hints for small rectangles in treemap (otherwise it's impossible to read package/class name)
@@ -41,12 +45,37 @@ import static ru.intellijeval.PluginUtil.*
  * Date: 18/11/2012
  */
 class ProjectTreeMap {
+	private static final Logger LOG = Logger.getInstance(ProjectTreeMap.class);
+
+	// TODO this should be a container per project
+	// TODO must be cached like http server is cached (otherwise it's not really cached)
 	private static Container rootContainer = null // TODO will it be GCed on plugin reload?
 
-	static showFor(Project project) {
-		rootContainer = null
+	static initActions() {
+		registerAction("ProjectTreeMap-Show", "alt T") { AnActionEvent event ->
+			ensureRootContainerInitialized(event.project) {
+				SimpleHttpServer server = restartHttpServer()
+				BrowserUtil.launchBrowser("http://localhost:${server.port}/treemap.html")
+			}
+		}
+		registerAction("ProjectTreeMap-RecalculateTree", "alt R") { AnActionEvent event ->
+//			if (rootContainer != null) {
+//				def userResponse = JOptionPane.showConfirmDialog(null, "Reset project treemap?", "TreeMap", JOptionPane.YES_NO_OPTION)
+//				if (userResponse != JOptionPane.YES_OPTION) return
+//			}
 
-		new Task.Backgroundable(project, "Preparing tree map...", true, PerformInBackgroundOption.ALWAYS_BACKGROUND) {
+			rootContainer = null
+			ensureRootContainerInitialized(event.project) {
+				show("Recalculated project tree map")
+			}
+		}
+		show("Registered ProjectTreeMap actions")
+	}
+
+	private static ensureRootContainerInitialized(Project project, Closure closure) {
+		if (rootContainer != null) return closure.call()
+
+		new Task.Backgroundable(project, "Building tree map index for project...", true, PerformInBackgroundOption.ALWAYS_BACKGROUND) {
 			@Override void run(ProgressIndicator indicator) {
 				ApplicationManager.application.runReadAction {
 					try {
@@ -58,14 +87,18 @@ class ProjectTreeMap {
 			}
 
 			@Override void onSuccess() {
-				def server = restartHttpServer("ProjectTreeMap_HttpServer",
-						{ String requestURI -> new RequestHandler(rootContainer).onRequest(requestURI) },
-						{ Exception e -> SwingUtilities.invokeLater{ showExceptionInConsole(e, project) } }
-				)
-				BrowserUtil.launchBrowser("http://localhost:${server.port}/treemap.html")
+				closure.call()
 			}
 
 		}.queue()
+	}
+
+	private static  SimpleHttpServer restartHttpServer() {
+		def server = restartHttpServer("ProjectTreeMap_HttpServer",
+				{ String requestURI -> new RequestHandler(rootContainer).handleRequest(requestURI) },
+				{ Exception e -> SwingUtilities.invokeLater { ProjectTreeMap.LOG.error("", e) } }
+		)
+		server
 	}
 
 	static class RequestHandler {
@@ -77,7 +110,7 @@ class ProjectTreeMap {
 			this.skipEmptyMiddlePackages = skipEmptyMiddlePackages
 		}
 
-		String onRequest(String requestURI) {
+		String handleRequest(String requestURI) {
 			if (!requestURI.endsWith(".json")) return
 
 			def containerRequest = requestURI.replace(".json", "").replaceFirst("/", "")

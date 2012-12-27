@@ -1,15 +1,20 @@
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.*
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiManager
 
-import static ProjectTreeMap.*
+import static ProjectTreeMap.JavaClassEstimator
 import static ru.intellijeval.PluginUtil.*
 
+
 //WordCloud.showFor(event.project)
-ProjectTreeMap.showFor((Project) event.project)
+ProjectTreeMap.initActions()
+
 
 if (true) return
+// the code below is to experiment and play with java classes size estimation
 
 List<PsiClass> psiJavaClassesInOpenEditor(Project project) {
 	VirtualFile virtualFile = FileEditorManagerEx.getInstance(project).currentFile

@@ -45,7 +45,6 @@
     var treemap = d3.layout.treemap()
             .round(false)
             .size([w, h])
-//            .sticky(true)
             .value(function(d) { return d.size; });
 
     var svg = d3.select("#body").append("div")
