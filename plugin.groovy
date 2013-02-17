@@ -1,16 +1,21 @@
+import com.intellij.openapi.application.Application
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiManager
 
+import static intellijeval.PluginUtil.registerAction
+import static intellijeval.PluginUtil.show
 import static ProjectTreeMap.JavaClassEstimator
-import static ru.intellijeval.PluginUtil.*
 
 
-//WordCloud.showFor(event.project)
-ProjectTreeMap.initActions()
+//WordCloud.showFor(event.project, pluginPath)
+ProjectTreeMap.initActions(pluginPath)
+show(pluginPath)
 
 
 if (true) return

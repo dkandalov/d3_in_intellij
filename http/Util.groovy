@@ -3,49 +3,26 @@ package http
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import static ru.intellijeval.PluginUtil.*
+import static intellijeval.PluginUtil.*
 
 class Util {
 	static def exampleOfUsage() {
 		resetCached("GetStringId")
-		getCachedOrCreate("GetStringId") { prevValue ->
+		getCachedBy("GetStringId") { prevValue ->
 			if (prevValue != null) {
-//				show(prevValue)
 				prevValue
 			} else {
-//				show("newwww!!!")
 				"Cached string!! ${new Random().nextInt(100)}"
 			}
 		}
-	}
-
-	static def <T> T getCachedOrCreate(String id, Closure callback) {
-		def actionManager = ActionManager.instance
-
-		def action = actionManager.getAction(id)
-		T newValue
-		if (action != null) {
-			actionManager.unregisterAction(id)
-			def prevValue = action.value
-			newValue = (T) callback.call(prevValue)
-		} else {
-			newValue = (T) callback.call(null)
-		}
-
-		actionManager.registerAction(id, new AnAction() {
-			final def value = newValue
-
-			@Override void actionPerformed(AnActionEvent e) {}
-		})
-		newValue
 	}
 
 	static def resetCached(String id) {
 		ActionManager.instance.unregisterAction(id)
 	}
 
-	public static SimpleHttpServer restartHttpServer(String id, Closure handler, Closure errorListener) {
-		getCachedOrCreate(id) { previousServer ->
+	public static SimpleHttpServer restartHttpServer(String id, String pluginPath, Closure handler, Closure errorListener) {
+		getCachedBy(id) { previousServer ->
 			if (previousServer != null) {
 				previousServer.stop()
 			}
@@ -54,7 +31,7 @@ class Util {
 			def started = false
 			for (port in (8100..10000)) {
 				try {
-					server.start(port, handler, errorListener)
+					server.start(port, pluginPath, handler, errorListener)
 					started = true
 					break
 				} catch (BindException ignore) {

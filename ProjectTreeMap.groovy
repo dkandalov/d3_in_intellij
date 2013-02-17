@@ -21,9 +21,9 @@ import http.SimpleHttpServer
 import javax.swing.*
 
 import static http.Util.restartHttpServer
-import static ru.intellijeval.PluginUtil.showExceptionInConsole
-import static ru.intellijeval.PluginUtil.showInConsole
-import static ru.intellijeval.PluginUtil.*
+import static intellijeval.PluginUtil.showExceptionInConsole
+import static intellijeval.PluginUtil.showInConsole
+import static intellijeval.PluginUtil.*
 
 /**
  * What could be improved:
@@ -40,9 +40,6 @@ import static ru.intellijeval.PluginUtil.*
  *  - clickable breadcrumbs (e.g. to quickly navigate several methods up)
  *  - reduce breadcrumbs font size when it doesn't fit on screen?
  *  - break up classes into methods?
- *
- * User: dima
- * Date: 18/11/2012
  */
 class ProjectTreeMap {
 	private static final Logger LOG = Logger.getInstance(ProjectTreeMap.class);
@@ -51,10 +48,10 @@ class ProjectTreeMap {
 	// TODO must be cached like http server is cached (otherwise it's not really cached)
 	private static Container rootContainer = null // TODO will it be GCed on plugin reload?
 
-	static initActions() {
+	static initActions(String pluginPath) {
 		registerAction("ProjectTreeMap-Show", "alt T") { AnActionEvent event ->
 			ensureRootContainerInitialized(event.project) {
-				SimpleHttpServer server = restartHttpServer()
+				SimpleHttpServer server = restartHttpServer(pluginPath)
 				BrowserUtil.launchBrowser("http://localhost:${server.port}/treemap.html")
 			}
 		}
@@ -93,8 +90,8 @@ class ProjectTreeMap {
 		}.queue()
 	}
 
-	private static  SimpleHttpServer restartHttpServer() {
-		def server = restartHttpServer("ProjectTreeMap_HttpServer",
+	private static  SimpleHttpServer restartHttpServer(String pluginPath) {
+		def server = restartHttpServer("ProjectTreeMap_HttpServer", pluginPath,
 				{ String requestURI -> new RequestHandler(rootContainer).handleRequest(requestURI) },
 				{ Exception e -> SwingUtilities.invokeLater { ProjectTreeMap.LOG.error("", e) } }
 		)

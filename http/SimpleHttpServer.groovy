@@ -6,8 +6,7 @@ import com.sun.net.httpserver.HttpServer
 
 import java.util.concurrent.Executors
 
-import static ru.intellijeval.EvalComponent.pluginToPathMap
-import static ru.intellijeval.PluginUtil.*
+import static intellijeval.PluginUtil.*
 
 /**
  * User: dima
@@ -22,11 +21,11 @@ class SimpleHttpServer {
 		server.start(8084)
 	}
 
-	void start(int port = 8100, Closure handler = {null}, Closure errorListener = {}) {
+	void start(int port = 8100, String pluginPath, Closure handler = {null}, Closure errorListener = {}) {
 		this.port = port
 
 		server = HttpServer.create(new InetSocketAddress(port), 0)
-		server.createContext("/", new MyHandler(handler, errorListener))
+		server.createContext("/", new MyHandler(pluginPath, handler, errorListener))
 		server.executor = Executors.newCachedThreadPool()
 		server.start()
 	}
@@ -38,8 +37,10 @@ class SimpleHttpServer {
 	private static class MyHandler implements HttpHandler {
 		private final Closure handler
 		private final Closure errorListener
+		private final String pluginPath
 
-		MyHandler(Closure handler, Closure errorListener) {
+		MyHandler(String pluginPath, Closure handler, Closure errorListener) {
+			this.pluginPath = pluginPath
 			this.handler = handler
 			this.errorListener = errorListener
 		}
@@ -47,33 +48,27 @@ class SimpleHttpServer {
 		@Override void handle(HttpExchange exchange) {
 			new Exchanger(exchange).with {
 				try {
-//					errorListener.call(new IllegalStateException("aajoasjdoasjd"))
-//					throw new IllegalStateException("aajoasjdoasjd")
-//					show(this.mapping."{$requestURI[1..-1]}")
-
 					def handlerResponse = this.handler(requestURI)
 					if (handlerResponse != null) {
 						replyWithText(handlerResponse.toString())
 					} else if (requestURI.startsWith("/") && requestURI.size() > 1) {
-						// TODO replace with "path" parameter
-						def pathToPluginFolder = pluginToPathMap().get("tagcloud")
-						def file = new File(pathToPluginFolder + "/http" + "${requestURI.toString()}")
+						def file = new File(this.pluginPath + "/http" + "${requestURI.toString()}")
 						if (!file.exists()) {
 							replyNotFound()
 						} else {
-							replyWithText(file.readLines().join("\n"), guessContentTypeOf(file))
+							replyWithText(file.readLines().join("\n"), contentTypeOf(file))
 						}
 					} else {
 						replyNotFound()
 					}
 				} catch (Exception e) {
-					show(e.toString())
+					replyWithException(e)
 //					errorListener.call(e)
 				}
 			}
 		}
 
-		static String guessContentTypeOf(File file) {
+		private static String contentTypeOf(File file) {
 			if (file.name.endsWith(".css")) "text/css"
 			else if (file.name.endsWith(".js")) "text/javascript"
 			else if (file.name.endsWith(".html")) "text/html"
@@ -95,6 +90,13 @@ class SimpleHttpServer {
 				exchange.responseHeaders.set("Content-Type", contentType)
 				exchange.sendResponseHeaders(200, 0)
 				exchange.responseBody.write(text.bytes)
+				exchange.responseBody.close()
+			}
+
+			void replyWithException(Exception e) {
+				exchange.responseHeaders.set("Content-Type", "text/plain")
+				exchange.sendResponseHeaders(500, 0)
+				e.printStackTrace(new PrintStream(exchange.responseBody))
 				exchange.responseBody.close()
 			}
 

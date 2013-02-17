@@ -9,15 +9,17 @@ import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.*
 
+import javax.swing.SwingUtilities
+
 import static http.Util.restartHttpServer
-import static ru.intellijeval.PluginUtil.*
+import static intellijeval.PluginUtil.*
 
 /**
  * User: dima
  * Date: 18/11/2012
  */
 class WordCloud {
-	static def showFor(Project project) {
+	static def showFor(Project project, String pluginPath) {
 		String wordsAsJSON = ""
 
 		new Task.Backgroundable(project, "Preparing word cloud...", true, PerformInBackgroundOption.ALWAYS_BACKGROUND) {
@@ -29,10 +31,10 @@ class WordCloud {
 
 						wordsAsJSON = convertToJSON(wordOccurrences)
 
-//						SwingUtilities.invokeLater{
-//							def output = wordOccurrences.entrySet().sort{it.value}.join("\n")
-//							showInConsole(output, project)
-//						}
+						SwingUtilities.invokeLater{
+							def output = wordOccurrences.entrySet().sort{it.value}.join("\n")
+							showInConsole(output, project)
+						}
 					} catch (Exception e) {
 						showExceptionInConsole(e, project)
 					}
@@ -41,7 +43,7 @@ class WordCloud {
 
 			@Override void onSuccess() {
 				def handler = { ["/words.json": wordsAsJSON].get(it) }
-				def server = restartHttpServer("WordCloud_HttpServer", handler, { it.printStackTrace() })
+				def server = restartHttpServer("WordCloud_HttpServer", pluginPath, handler, { it.printStackTrace() })
 				BrowserUtil.launchBrowser("http://localhost:${server.port}/wordcloud.html")
 			}
 		}.queue()
