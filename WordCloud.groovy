@@ -1,4 +1,6 @@
 import com.intellij.ide.BrowserUtil
+import com.intellij.openapi.actionSystem.DataContext
+import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.PerformInBackgroundOption
 import com.intellij.openapi.progress.ProgressIndicator
@@ -19,15 +21,17 @@ import static intellijeval.PluginUtil.*
  * Date: 18/11/2012
  */
 class WordCloud {
-	static def showFor(Project project, String pluginPath) {
+	static def showFor(DataContext dataContext, String pluginPath) {
 		String wordsAsJSON = ""
+		List<VirtualFile> files = PlatformDataKeys.VIRTUAL_FILE_ARRAY.getData(dataContext).toList()
+		Project project = PlatformDataKeys.PROJECT.getData(dataContext)
 
 		new Task.Backgroundable(project, "Preparing word cloud...", true, PerformInBackgroundOption.ALWAYS_BACKGROUND) {
 			@Override void run(ProgressIndicator indicator) {
 				ApplicationManager.application.runReadAction {
 					try {
-						//Map wordOccurrences = new TextualWordOccurrences().calculateFor(project, indicator)
-						Map wordOccurrences = new IdentifiersOccurrences().calculateFor(project, indicator)
+						Map wordOccurrences = new TextualWordOccurrences().calculateFor(files, project, indicator)
+//						Map wordOccurrences = new IdentifiersOccurrences().calculateFor(project, indicator)
 
 						wordsAsJSON = convertToJSON(wordOccurrences)
 
@@ -36,7 +40,7 @@ class WordCloud {
 							showInConsole(output, project)
 						}
 					} catch (Exception e) {
-						showExceptionInConsole(e, project)
+						showInConsole(e, project)
 					}
 				}
 			}
@@ -68,11 +72,11 @@ ${wordOccurrences.entrySet().sort{ -it.value }.take(600).collect { '{"text": "' 
 	}
 
 	private interface WordCloudSource {
-		Map<String, Integer> calculateFor(Project project, ProgressIndicator indicator)
+		Map<String, Integer> calculateFor(List<VirtualFile> files, Project project, ProgressIndicator indicator)
 	}
 
 	private static class IdentifiersOccurrences implements WordCloudSource {
-		@Override Map<String, Integer> calculateFor(Project project, ProgressIndicator indicator) {
+		@Override Map<String, Integer> calculateFor(List<VirtualFile> files, Project project, ProgressIndicator indicator) {
 			def occurrences = new HashMap<String, Integer>().withDefault { 0 }
 			forEachClassIn(project) { PsiClass psiClass ->
 				forEachIdentifierIn(psiClass) { PsiIdentifier psiIdentifier ->
@@ -109,24 +113,34 @@ ${wordOccurrences.entrySet().sort{ -it.value }.take(600).collect { '{"text": "' 
 		}
 	}
 
-	static class TextualWordOccurrences implements WordCloudSource {
-		@Override Map<String, Integer> calculateFor(Project project, ProgressIndicator indicator) {
-			def wordOccurrences = new HashMap<String, Integer>().withDefault { 0 }
-			def rootManager = ProjectRootManager.getInstance(project)
+	private static class TextualWordOccurrences implements WordCloudSource {
+		private static final STOP = "STOP"
+		private static final CONTINUE = null
 
-			rootManager.fileIndex.iterateContent(new ContentIterator() {
-				@Override boolean processFile(VirtualFile file) {
-					if (indicator.canceled) return false
-					analyzeFile(file, wordOccurrences)
-				}
-			})
+		@Override Map<String, Integer> calculateFor(List<VirtualFile> files, Project project, ProgressIndicator indicator) {
+			def wordOccurrences = new HashMap<String, Integer>().withDefault { 0 }
+
+			processRecursively(files) { file ->
+				if (indicator.canceled) return STOP
+				analyzeFile(file, wordOccurrences)
+				CONTINUE
+			}
 			wordOccurrences.entrySet().removeAll { it.key == "def" || it.key == "new" }
+			show(wordOccurrences)
 			wordOccurrences
 		}
 
-		private static boolean analyzeFile(VirtualFile file, wordOccurrences) {
-			if (file.isDirectory()) return true
-			if (file.extension != "groovy" && file.extension != "java") return true
+		private static boolean processRecursively(List<VirtualFile> files, Closure process) {
+			if (files == null || files.empty) return CONTINUE
+			for (file in files) {
+				if (process(file) == STOP) return STOP
+				processRecursively(file?.children?.toList(), process)
+			}
+		}
+
+		private static void analyzeFile(VirtualFile file, wordOccurrences) {
+			if (file.isDirectory()) return
+			if (file.extension != "groovy" && file.extension != "java") return
 
 			def text = file.inputStream.readLines()
 
@@ -143,8 +157,6 @@ ${wordOccurrences.entrySet().sort{ -it.value }.take(600).collect { '{"text": "' 
 					wordOccurrences.put(word, wordOccurrences[word] + 1)
 				}
 			}
-			true
 		}
-
 	}
 }

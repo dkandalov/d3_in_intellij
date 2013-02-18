@@ -1,3 +1,4 @@
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.Application
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
@@ -13,10 +14,12 @@ import static intellijeval.PluginUtil.show
 import static ProjectTreeMap.JavaClassEstimator
 
 
-//WordCloud.showFor(event.project, pluginPath)
-ProjectTreeMap.initActions(pluginPath)
-show(pluginPath)
-
+registerAction("WordCloud", "ctrl alt shift T") { AnActionEvent event ->
+	WordCloud.showFor(event.dataContext, pluginPath)
+}
+//ProjectTreeMap.initActions(pluginPath)
+//show(pluginPath)
+show("reloaded")
 
 if (true) return
 // the code below is to experiment and play with java classes size estimation
